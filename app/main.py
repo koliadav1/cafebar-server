@@ -11,8 +11,16 @@ from jose import JWTError, jwt
 
 from app.database import engine, Base
 from app.routers import users, auth, menu, orders, reviews, supplies, shifts, ingredients, booking, resume, recommendations, statistics
-from app.scheduler.scheduler import schedule_booking_updater, start_scheduler, scheduler
+
 from app.config import Config
+
+import os
+
+if os.getenv("TESTING"):
+    scheduler = None
+else:
+    from app.scheduler.scheduler import schedule_booking_updater, start_scheduler, scheduler
+
 
 #Планировщик завершения бронирований по итсечении времени
 @asynccontextmanager

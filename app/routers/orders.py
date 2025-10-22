@@ -200,4 +200,4 @@ async def update_order_item_status(
         }
     }))
 
-    return {"detail": "Статус позиции заказа обнослен"}
+    return {"detail": "Статус позиции заказа обновлен"}
