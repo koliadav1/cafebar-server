@@ -1,41 +1,46 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 
 from app.models.staff_shifts import StaffShift
 from app.schemas.shift import StaffShiftCreate, StaffShiftUpdate
 
-#Получить все смены
-def get_all_shifts(db: Session) -> List[StaffShift]:
-    return db.query(StaffShift).all()
+# Получить все смены
+async def get_all_shifts(db: AsyncSession) -> List[StaffShift]:
+    result = await db.execute(select(StaffShift))
+    return result.scalars().all()
 
-#Получить смены конкретного пользователя
-def get_shifts_by_user(db: Session, user_id: int) -> List[StaffShift]:
-    return db.query(StaffShift).filter(StaffShift.user_id == user_id).all()
+# Получить смены конкретного пользователя
+async def get_shifts_by_user(db: AsyncSession, user_id: int) -> List[StaffShift]: 
+    result = await db.execute(select(StaffShift).where(StaffShift.user_id == user_id))
+    return result.scalars().all()
 
-#Создать смену
-def create_shift(db: Session, shift: StaffShiftCreate) -> StaffShift:
-    db_shift = StaffShift(**shift.dict())
+# Создать смену
+async def create_shift(db: AsyncSession, shift: StaffShiftCreate) -> StaffShift:
+    db_shift = StaffShift(**shift.model_dump())
     db.add(db_shift)
-    db.commit()
-    db.refresh(db_shift)
+    await db.commit()
+    await db.refresh(db_shift)
     return db_shift
 
-#Изменить смену
-def update_shift(db: Session, shift_id: int, shift_data: StaffShiftUpdate) -> Optional[StaffShift]:
-    db_shift = db.query(StaffShift).filter(StaffShift.shift_id == shift_id).first()
+# Изменить смену
+async def update_shift(db: AsyncSession, shift_id: int, shift_data: StaffShiftUpdate) -> Optional[StaffShift]:
+    result = await db.execute(select(StaffShift).where(StaffShift.shift_id == shift_id))
+    db_shift = result.scalar_one_or_none()
     if not db_shift:
         return None
-    for key, value in shift_data.dict().items():
+    for key, value in shift_data.model_dump().items():
         setattr(db_shift, key, value)
-    db.commit()
-    db.refresh(db_shift)
+    await db.commit()
+    await db.refresh(db_shift)
     return db_shift
 
-#Удалить смену
-def delete_shift(db: Session, shift_id: int) -> bool:
-    db_shift = db.query(StaffShift).filter(StaffShift.shift_id == shift_id).first()
+# Удалить смену
+async def delete_shift(db: AsyncSession, shift_id: int) -> bool:
+    result = await db.execute(select(StaffShift).where(StaffShift.shift_id == shift_id))
+    db_shift = result.scalar_one_or_none()
     if not db_shift:
         return False
-    db.delete(db_shift)
-    db.commit()
+    await db.delete(db_shift)
+    await db.commit()
     return True

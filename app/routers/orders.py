@@ -1,7 +1,7 @@
 import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 
 from app.models.order_items import OrderItem, OrderItemStatus
@@ -18,60 +18,58 @@ router = APIRouter(prefix="/orders", tags=["Заказы"])
 
 # Получить список заказов
 @router.get("/", response_model=List[schema.OrderOut])
-async def get_orders(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> List[Order]:
+async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)) -> List[Order]:
     if current_user.role == "Client":
-        orders = await asyncio.to_thread(order_service.get_orders_by_user, current_user.user_id, db)
+        orders = await order_service.get_orders_by_user(current_user.user_id, db)
     else:
-        orders = await asyncio.to_thread(order_service.get_all_orders, db)
+        orders = await order_service.get_all_orders(db)
     return orders
 
-#Получить все назначения персонала
+# Получить все назначения персонала
 @router.get("/assigned_staff", response_model=list[schema.AssignedStaffWithOrder])
-def get_all_assigned_staff_for_in_progress_orders(
-    db: Session = Depends(get_db),
+async def get_all_assigned_staff_for_in_progress_orders(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)) -> List[OrderAssignment]:
     allowed_roles = {"Admin", "Waiter", "Barkeeper", "Cook"}
     if current_user.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="Доступ запрещен")
 
-    assignments = order_service.get_all_assigned_staff_for_in_progress_orders(db)
+    assignments = await order_service.get_all_assigned_staff_for_in_progress_orders(db)
     return assignments
 
 # Получить заказ по id
 @router.get("/{order_id}", response_model=schema.OrderOut)
 async def get_order(order_id: int, 
-                    db: Session = Depends(get_db), 
+                    db: AsyncSession = Depends(get_db),
                     current_user: User = Depends(get_current_user)) -> Order:
     if current_user.role not in ["Admin", "Barkeeper", "Cook", "Waiter"]:
         raise HTTPException(status_code=403, detail="Доступ запрещен")
-    order = await asyncio.to_thread(order_service.get_order_by_id, order_id, db)
-    if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
+    order = await order_service.get_order_by_id(order_id, db)
     return order
 
 # Создать заказ
 @router.post("/", response_model=schema.OrderOut)
 async def create_order(order: schema.OrderCreate, 
-                       db: Session = Depends(get_db), 
+                       db: AsyncSession = Depends(get_db),
                        current_user: User = Depends(get_current_user)) -> Order:
     if current_user.role != "Client" and current_user.role != "Waiter":
         raise HTTPException(status_code=403, detail="Доступ запрещен")
-    new_order = await asyncio.to_thread(order_service.create_order, order, db)
+    new_order = await order_service.create_order(order, db)
     asyncio.create_task(manager.broadcast({
         "type": "order_create",
         "payload": {"action": "create", "order": schema.OrderOut.model_validate(new_order).model_dump()}
     }))
     return new_order
 
-#Удаление заказа по id
+# Удаление заказа по id
 @router.delete("/{order_id}")
 async def delete_order(order_id: int, 
-                       db: Session = Depends(get_db), 
+                       db: AsyncSession = Depends(get_db),
                        current_user: User = Depends(get_current_user)) -> dict[str, str]:
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Доступ запрещен")
 
-    result = await asyncio.to_thread(order_service.delete_order, order_id, db)
+    result = await order_service.delete_order(order_id, db)
     asyncio.create_task(manager.broadcast({
         "type": "order_delete",
         "payload": {"action": "delete", "order_id": order_id}
@@ -82,16 +80,13 @@ async def delete_order(order_id: int,
 @router.patch("/{order_id}/status", response_model=schema.OrderOut)
 async def update_status(order_id: int, 
                         status: schema.OrderStatus = Query(...), 
-                        db: Session = Depends(get_db), 
+                        db: AsyncSession = Depends(get_db),
                         current_user: User = Depends(get_current_user)) -> Order:
-    order = await asyncio.to_thread(order_service.get_order_by_id, order_id, db)
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-
+    order = await order_service.get_order_by_id(order_id, db)
     if order.status in [schema.OrderStatus.COMPLETED, schema.OrderStatus.CANCELLED]:
         raise HTTPException(status_code=400, detail="Нельзя менять статус у завершенных или отмененных заказов")
     if status == schema.OrderStatus.READY:
-        raise HTTPException(status_code=400, detail="Заказ завершится сам") #После выдачи всех позиций заказа
+        raise HTTPException(status_code=400, detail="Заказ завершится сам")
 
     if current_user.role == "Client":
         if order.user_id != current_user.user_id:
@@ -103,7 +98,7 @@ async def update_status(order_id: int,
         if order.status == schema.OrderStatus.READY:
             raise HTTPException(status_code=400, detail="Нельзя отменить готовый заказ")
 
-    updated_order = await asyncio.to_thread(order_service.update_order_status, order_id, status, db)
+    updated_order = await order_service.update_order_status(order_id, status, db)
     asyncio.create_task(manager.broadcast({
         "type": "order_update",
         "payload": {"action": "update", "order": schema.OrderOut.model_validate(updated_order).model_dump()}
@@ -113,12 +108,9 @@ async def update_status(order_id: int,
 # Назначить исполнителя к заказу
 @router.patch("/{order_id}/assign", response_model=schema.OrderOut)
 async def assign_self_to_order(order_id: int, 
-                               db: Session = Depends(get_db), 
+                               db: AsyncSession = Depends(get_db),
                                current_user: User = Depends(get_current_user)) -> Order:
-    order = await asyncio.to_thread(order_service.get_order_by_id, order_id, db)
-    if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-
+    order = await order_service.get_order_by_id(order_id, db)
     if current_user.role not in ["Cook", "Barkeeper", "Waiter"]:
         raise HTTPException(status_code=403, detail="Доступ запрещен")
 
@@ -127,8 +119,7 @@ async def assign_self_to_order(order_id: int,
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверная роль")
 
-    updated_order = await asyncio.to_thread(
-        order_service.assign_staff_to_order,
+    updated_order = await order_service.assign_staff_to_order(
         order_id,
         current_user.user_id,
         staff_role,
@@ -142,12 +133,12 @@ async def assign_self_to_order(order_id: int,
 
     return updated_order
 
-#Изменить статус позиции заказа
+# Изменить статус позиции заказа
 @router.patch("/order-items/{order_item_id}/status")
 async def update_order_item_status(
     order_item_id: int,
     update_data: schema.UpdateOrderItemStatus,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)) -> dict[str, str]:
     allowed_roles = ["Cook", "Barkeeper", "Waiter"]
     if current_user.role not in allowed_roles:
@@ -159,21 +150,25 @@ async def update_order_item_status(
     if current_user.role == "Waiter" and update_data.status != OrderItemStatus.COMPLETED:
         raise HTTPException(status_code=403, detail="Вы можете поменять статус только на 'Завершено'")
 
-    order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
+    result = await db.execute(select(OrderItem).where(OrderItem.order_item_id == order_item_id))
+    order_item = result.scalar_one_or_none()
     if not order_item:
         raise HTTPException(status_code=404, detail="Позиция не найдена")
 
     order_item.status = update_data.status
-    db.commit()
-    db.refresh(order_item)
+    await db.commit()
+    await db.refresh(order_item)
 
-    order = db.query(Order).filter(Order.order_id == order_item.order_id).first()
-    order_items = db.query(OrderItem).filter(OrderItem.order_id == order_item.order_id).all()
+    order_result = await db.execute(select(Order).where(Order.order_id == order_item.order_id))
+    order = order_result.scalar_one_or_none()
+    
+    items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == order_item.order_id))
+    order_items = items_result.scalars().all()
 
     if order and all(item.status == OrderItemStatus.READY for item in order_items):
         order.status = schema.OrderStatus.READY
-        db.commit()
-        db.refresh(order)
+        await db.commit()
+        await db.refresh(order)
 
         asyncio.create_task(manager.broadcast({
             "type": "order_update",
@@ -182,8 +177,8 @@ async def update_order_item_status(
         
     if order and all(item.status == OrderItemStatus.COMPLETED for item in order_items):
         order.status = schema.OrderStatus.COMPLETED
-        db.commit()
-        db.refresh(order)    
+        await db.commit()
+        await db.refresh(order)
 
         asyncio.create_task(manager.broadcast({
             "type": "order_update",

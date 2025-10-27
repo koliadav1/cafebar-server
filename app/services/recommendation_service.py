@@ -1,15 +1,15 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from app.models.orders import Order
 from app.models.order_items import OrderItem
 from app.models.menu_items import MenuItem, MenuCategory
 from app.schemas.recommendation import RecommendedItem
 
-#Получение самых популярных блюд
-def get_most_popular_items(db: Session, limit: int = 5) -> list[RecommendedItem]:
-    results = (
-        db.query(
+# Получение самых популярных блюд
+async def get_most_popular_items(db: AsyncSession, limit: int = 5) -> list[RecommendedItem]:
+    stmt = (
+        select(
             MenuItem.item_id,
             MenuItem.name,
             MenuItem.category,
@@ -17,18 +17,20 @@ def get_most_popular_items(db: Session, limit: int = 5) -> list[RecommendedItem]
         )
         .join(OrderItem, MenuItem.item_id == OrderItem.item_id)
         .join(Order, OrderItem.order_id == Order.order_id)
-        .filter(MenuItem.category != MenuCategory.DRINK)
+        .where(MenuItem.category != MenuCategory.DRINK)
         .group_by(MenuItem.item_id)
         .order_by(func.count(OrderItem.order_item_id).desc())
         .limit(limit)
-        .all()
     )
-    return [RecommendedItem.model_validate(row) for row in results]
+    
+    result = await db.execute(stmt)
+    rows = result.all()
+    return [RecommendedItem.model_validate(row) for row in rows]
 
-#Получить самые популярные блюда конкретного пользователя
-def get_user_recommendations(user_id: int, db: Session, limit: int = 5) -> list[RecommendedItem]:
-    results = (
-        db.query(
+# Получить самые популярные блюда конкретного пользователя
+async def get_user_recommendations(user_id: int, db: AsyncSession, limit: int = 5) -> list[RecommendedItem]:
+    stmt = (
+        select(
             MenuItem.item_id,
             MenuItem.name,
             MenuItem.category,
@@ -36,18 +38,20 @@ def get_user_recommendations(user_id: int, db: Session, limit: int = 5) -> list[
         )
         .join(OrderItem, MenuItem.item_id == OrderItem.item_id)
         .join(Order, OrderItem.order_id == Order.order_id)
-        .filter(Order.user_id == user_id, MenuItem.category != MenuCategory.DRINK)
+        .where(Order.user_id == user_id, MenuItem.category != MenuCategory.DRINK)
         .group_by(MenuItem.item_id)
         .order_by(func.count(OrderItem.order_item_id).desc())
         .limit(limit)
-        .all()
     )
-    return [RecommendedItem.model_validate(row) for row in results]
+    
+    result = await db.execute(stmt)
+    rows = result.all()
+    return [RecommendedItem.model_validate(row) for row in rows]
 
-#Получить самые популярные напитки
-def get_most_popular_drinks(db: Session, limit: int = 5) -> list[RecommendedItem]:
-    results = (
-        db.query(
+# Получить самые популярные напитки
+async def get_most_popular_drinks(db: AsyncSession, limit: int = 5) -> list[RecommendedItem]:
+    stmt = (
+        select(
             MenuItem.item_id,
             MenuItem.name,
             MenuItem.category,
@@ -55,18 +59,20 @@ def get_most_popular_drinks(db: Session, limit: int = 5) -> list[RecommendedItem
         )
         .join(OrderItem, MenuItem.item_id == OrderItem.item_id)
         .join(Order, OrderItem.order_id == Order.order_id)
-        .filter(MenuItem.category == MenuCategory.DRINK)
+        .where(MenuItem.category == MenuCategory.DRINK)
         .group_by(MenuItem.item_id)
         .order_by(func.count(OrderItem.order_item_id).desc())
         .limit(limit)
-        .all()
     )
-    return [RecommendedItem.model_validate(row) for row in results]
+    
+    result = await db.execute(stmt)
+    rows = result.all()
+    return [RecommendedItem.model_validate(row) for row in rows]
 
-#Получить самые популярные напитки конкретного пользователя
-def get_user_drink_recommendations(user_id: int, db: Session, limit: int = 5) -> list[RecommendedItem]:
-    results = (
-        db.query(
+# Получить самые популярные напитки конкретного пользователя
+async def get_user_drink_recommendations(user_id: int, db: AsyncSession, limit: int = 5) -> list[RecommendedItem]:
+    stmt = (
+        select(
             MenuItem.item_id,
             MenuItem.name,
             MenuItem.category,
@@ -74,10 +80,12 @@ def get_user_drink_recommendations(user_id: int, db: Session, limit: int = 5) ->
         )
         .join(OrderItem, MenuItem.item_id == OrderItem.item_id)
         .join(Order, OrderItem.order_id == Order.order_id)
-        .filter(Order.user_id == user_id, MenuItem.category == MenuCategory.DRINK)
+        .where(Order.user_id == user_id, MenuItem.category == MenuCategory.DRINK)
         .group_by(MenuItem.item_id)
         .order_by(func.count(OrderItem.order_item_id).desc())
         .limit(limit)
-        .all()
     )
-    return [RecommendedItem.model_validate(row) for row in results]
+    
+    result = await db.execute(stmt)
+    rows = result.all()
+    return [RecommendedItem.model_validate(row) for row in rows]

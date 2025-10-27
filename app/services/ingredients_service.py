@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from fastapi import HTTPException
 
 from app.models.menu_item_ingredients import MenuItemIngredient
@@ -6,14 +7,21 @@ from app.models.ingredients import Ingredient
 from app.schemas.ingredient import IngredientOut, MenuItemIngredientCreate, MenuItemIngredientOut
 
 # Получить состав позиции меню по item_id
-def get_ingredients_by_item_id(item_id: int, db: Session) -> list[MenuItemIngredientOut]:
-    menu_item_ingredients = db.query(MenuItemIngredient).filter(MenuItemIngredient.item_id == item_id).all()
-    result = []
+async def get_ingredients_by_item_id(item_id: int, db: AsyncSession) -> list[MenuItemIngredientOut]:
+    result = await db.execute(
+        select(MenuItemIngredient).where(MenuItemIngredient.item_id == item_id)
+    )
+    menu_item_ingredients = result.scalars().all()
+    result_list = []
 
     for item_ingredient in menu_item_ingredients:
-        ingredient = db.query(Ingredient).filter(Ingredient.ingredient_id == item_ingredient.ingredient_id).first()
+        ingredient_result = await db.execute(
+            select(Ingredient).where(Ingredient.ingredient_id == item_ingredient.ingredient_id)
+        )
+        ingredient = ingredient_result.scalar_one_or_none()
+        
         if ingredient:
-            result.append(MenuItemIngredientOut(
+            result_list.append(MenuItemIngredientOut(
                 item_id=item_ingredient.item_id,
                 ingredient=IngredientOut(
                     ingredient_id=ingredient.ingredient_id,
@@ -22,11 +30,15 @@ def get_ingredients_by_item_id(item_id: int, db: Session) -> list[MenuItemIngred
                 ),
                 required_quantity=item_ingredient.required_quantity
             ))
-    return result
+    return result_list
 
 # Добавление ингредиента в состав позиции меню
-def create_menu_item_ingredient(item_id: int, ingredient_data: MenuItemIngredientCreate, db: Session) -> MenuItemIngredientOut:
-    existing_ingredient = db.query(Ingredient).filter(Ingredient.name == ingredient_data.ingredient.name).first()
+async def create_menu_item_ingredient(item_id: int, ingredient_data: MenuItemIngredientCreate, db: AsyncSession) -> MenuItemIngredientOut:
+    ingredient_result = await db.execute(
+        select(Ingredient).where(Ingredient.name == ingredient_data.ingredient.name)
+    )
+    existing_ingredient = ingredient_result.scalar_one_or_none()
+    
     if not existing_ingredient:
         new_ingredient = Ingredient(
             name=ingredient_data.ingredient.name,
@@ -35,8 +47,8 @@ def create_menu_item_ingredient(item_id: int, ingredient_data: MenuItemIngredien
             threshold=ingredient_data.ingredient.threshold
         )
         db.add(new_ingredient)
-        db.commit()
-        db.refresh(new_ingredient)
+        await db.commit()
+        await db.refresh(new_ingredient)
         existing_ingredient = new_ingredient
 
     new_menu_item_ingredient = MenuItemIngredient(
@@ -46,8 +58,8 @@ def create_menu_item_ingredient(item_id: int, ingredient_data: MenuItemIngredien
     )
 
     db.add(new_menu_item_ingredient)
-    db.commit()
-    db.refresh(new_menu_item_ingredient)
+    await db.commit()
+    await db.refresh(new_menu_item_ingredient)
 
     return MenuItemIngredientOut(
         item_id=new_menu_item_ingredient.item_id,
@@ -60,28 +72,36 @@ def create_menu_item_ingredient(item_id: int, ingredient_data: MenuItemIngredien
     )
 
 # Удалить ингредиент из состава позиции меню
-def delete_menu_item_ingredient(item_id: int, ingredient_id: int, db: Session):
-    menu_item_ingredient = db.query(MenuItemIngredient).filter(
-        MenuItemIngredient.item_id == item_id,
-        MenuItemIngredient.ingredient_id == ingredient_id
-    ).first()
+async def delete_menu_item_ingredient(item_id: int, ingredient_id: int, db: AsyncSession):
+    result = await db.execute(
+        select(MenuItemIngredient).where(
+            MenuItemIngredient.item_id == item_id,
+            MenuItemIngredient.ingredient_id == ingredient_id
+        )
+    )
+    menu_item_ingredient = result.scalar_one_or_none()
 
     if not menu_item_ingredient:
         raise HTTPException(status_code=404, detail="Ингредиент не найден в составе позиции меню")
 
-    db.delete(menu_item_ingredient)
-    db.commit()
+    await db.delete(menu_item_ingredient)
+    await db.commit()
     return {"detail": "Ингредиент удален из состава позиции меню"}
 
 # Получить все составы всех позиций меню
-def get_all_menu_item_ingredients(db: Session) -> list[MenuItemIngredientOut]:
-    menu_item_ingredients = db.query(MenuItemIngredient).all()
-    result = []
+async def get_all_menu_item_ingredients(db: AsyncSession) -> list[MenuItemIngredientOut]:
+    result = await db.execute(select(MenuItemIngredient))
+    menu_item_ingredients = result.scalars().all()
+    result_list = []
 
     for item_ingredient in menu_item_ingredients:
-        ingredient = db.query(Ingredient).filter(Ingredient.ingredient_id == item_ingredient.ingredient_id).first()
+        ingredient_result = await db.execute(
+            select(Ingredient).where(Ingredient.ingredient_id == item_ingredient.ingredient_id)
+        )
+        ingredient = ingredient_result.scalar_one_or_none()
+        
         if ingredient:
-            result.append(MenuItemIngredientOut(
+            result_list.append(MenuItemIngredientOut(
                 item_id=item_ingredient.item_id,
                 ingredient=IngredientOut(
                     ingredient_id=ingredient.ingredient_id,
@@ -91,4 +111,4 @@ def get_all_menu_item_ingredients(db: Session) -> list[MenuItemIngredientOut]:
                 required_quantity=item_ingredient.required_quantity
             ))
 
-    return result
+    return result_list

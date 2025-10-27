@@ -1,19 +1,26 @@
 from typing import List
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models.orders import Order
 from app.models.reviews import Review
 from app.schemas.review import ReviewCreate, ReviewUpdate
 
-#Получить все отзывы
-def get_all_reviews(db: Session) -> List[Review]:
-    reviews = db.query(Review).all()
-    return reviews
+# Получить все отзывы
+async def get_all_reviews(db: AsyncSession) -> List[Review]:
+    result = await db.execute(select(Review))
+    return result.scalars().all()
 
-#Создать отзыв
-def create_review(db: Session, review_data: ReviewCreate, user_id: int) -> Review:
-    order = db.query(Order).filter_by(order_id=review_data.order_id, user_id=user_id).first()
+# Создать отзыв
+async def create_review(db: AsyncSession, review_data: ReviewCreate, user_id: int) -> Review:
+    result = await db.execute(
+        select(Order).where(
+            Order.order_id == review_data.order_id, 
+            Order.user_id == user_id
+        )
+    )
+    order = result.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=403, detail="Вы можете оставлять отзывы только к своим заказам")
 
@@ -24,43 +31,48 @@ def create_review(db: Session, review_data: ReviewCreate, user_id: int) -> Revie
         comment=review_data.comment
     )
     db.add(db_review)
-    db.commit()
-    db.refresh(db_review)
+    await db.commit()
+    await db.refresh(db_review)
     return db_review
 
-#Получить отзывы конкретного пользователя
-def get_reviews_by_user(db: Session, user_id: int) -> List[Review]:
-    return db.query(Review).filter(Review.user_id == user_id).all()
+# Получить отзывы конкретного пользователя
+async def get_reviews_by_user(db: AsyncSession, user_id: int) -> List[Review]:
+    result = await db.execute(select(Review).where(Review.user_id == user_id))
+    return result.scalars().all()
 
-#Получить отзыв по id
-def get_review_by_id(db: Session, review_id: int) -> Review:
-    return db.query(Review).filter(Review.review_id == review_id).first()
+# Получить отзыв по id
+async def get_review_by_id(db: AsyncSession, review_id: int) -> Review:
+    result = await db.execute(select(Review).where(Review.review_id == review_id))
+    return result.scalar_one_or_none()
 
-#Изменить отзыв
-def update_review(db: Session, review_id: int, review_update: ReviewUpdate) -> Review:
-    db_review = db.query(Review).filter(Review.review_id == review_id).first()
+# Изменить отзыв
+async def update_review(db: AsyncSession, review_id: int, review_update: ReviewUpdate) -> Review:
+    result = await db.execute(select(Review).where(Review.review_id == review_id))
+    db_review = result.scalar_one_or_none()
     if db_review:
         db_review.rating = review_update.rating
         db_review.comment = review_update.comment
-        db.commit()
-        db.refresh(db_review)
+        await db.commit()
+        await db.refresh(db_review)
     return db_review
 
-#Удалить отзыв
-def delete_review(db: Session, review_id: int) -> Review:
-    db_review = db.query(Review).filter(Review.review_id == review_id).first()
+# Удалить отзыв
+async def delete_review(db: AsyncSession, review_id: int) -> Review:
+    result = await db.execute(select(Review).where(Review.review_id == review_id))
+    db_review = result.scalar_one_or_none()
     if db_review:
-        db.delete(db_review)
-        db.commit()
+        await db.delete(db_review)
+        await db.commit()
     return db_review
 
-#Ответить на отзыв
-def respond_to_review(db: Session, review_id: int, response: str) -> Review:
-    review = db.query(Review).filter(Review.review_id == review_id).first()
+# Ответить на отзыв
+async def respond_to_review(db: AsyncSession, review_id: int, response: str) -> Review:
+    result = await db.execute(select(Review).where(Review.review_id == review_id))
+    review = result.scalar_one_or_none()
     if not review:
         raise ValueError("Отзыв не найден")
 
     review.admin_response = response
-    db.commit()
-    db.refresh(review)
+    await db.commit()
+    await db.refresh(review)
     return review

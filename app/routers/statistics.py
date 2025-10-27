@@ -1,7 +1,5 @@
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date
 
 from app.database import get_db
@@ -12,10 +10,10 @@ from app.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/statistics", tags=["Статистика"])
 
-#Получение статистики персонала
+# Получение статистики персонала
 @router.get("/", response_model=list[StaffStatsWithRankOut])
 async def get_staff_statistics(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     start_date: date | None = Query(None, description="Фильтр: от даты (включительно)"),
     end_date: date | None = Query(None, description="Фильтр: до даты (включительно)"))  -> (list[StaffStatsOut] | dict):
@@ -25,8 +23,7 @@ async def get_staff_statistics(
     
     is_admin = current_user.role == UserRole.ADMIN
 
-    stats = await asyncio.to_thread(
-        statistics_service.get_staff_statistics,
+    stats = await statistics_service.get_staff_statistics(
         db,
         current_user.user_id,
         current_user.role,

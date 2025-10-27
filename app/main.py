@@ -9,7 +9,6 @@ from app.realtime.websocket_manager import manager
 from app.realtime.events import handle_event
 from jose import JWTError, jwt
 
-from app.database import engine, Base
 from app.routers import users, auth, menu, orders, reviews, supplies, shifts, ingredients, booking, resume, recommendations, statistics
 
 from app.config import Config
@@ -22,7 +21,7 @@ else:
     from app.scheduler.scheduler import schedule_booking_updater, start_scheduler, scheduler
 
 
-#Планировщик завершения бронирований по итсечении времени
+# Планировщик завершения бронирований по итсечении времени
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[LIFESPAN] Запуск планировщика")
@@ -36,7 +35,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         print("[LIFESPAN] Остановка планировщика")
-        scheduler.shutdown(wait=False)
+        if scheduler:
+            scheduler.shutdown(wait=False)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
@@ -73,8 +73,6 @@ app.include_router(booking.router)
 app.include_router(resume.router)
 app.include_router(recommendations.router)
 app.include_router(statistics.router)
-
-Base.metadata.create_all(bind=engine)
 
 #Проверка токенов
 async def verify_websocket_token(token: str):

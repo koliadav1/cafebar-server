@@ -1,51 +1,65 @@
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, patch
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from httpx._transports.asgi import ASGITransport
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.tests.mock_scheduler import scheduler, start_scheduler, schedule_booking_updater
+from tests.mock_scheduler import scheduler, start_scheduler, schedule_booking_updater, update_bookings_status
 
-with patch('app.scheduler.scheduler.scheduler', scheduler):
-    with patch('app.scheduler.scheduler.start_scheduler', start_scheduler):
-        with patch('app.scheduler.scheduler.schedule_booking_updater', schedule_booking_updater):
-            from app.main import app
-            from app.database import get_db, Base
+import os
+os.environ["TESTING"] = "1"
 
-# Фикстура для тестовой базы данных
-@pytest.fixture(scope="function")
-def test_db():
-    engine = create_engine(
-        "sqlite:///:memory:",
+with patch('app.config.Config.DATABASE_URL', 'sqlite+aiosqlite:///:memory:'):
+    with patch('app.database.engine') as mock_engine:
+        from tests.mock_scheduler import scheduler, start_scheduler, schedule_booking_updater, update_bookings_status
+        
+        with patch('app.scheduler.scheduler.scheduler', scheduler):
+            with patch('app.scheduler.scheduler.start_scheduler', start_scheduler):
+                with patch('app.scheduler.scheduler.schedule_booking_updater', schedule_booking_updater):
+                    with patch('app.scheduler.scheduler.update_bookings_status', update_bookings_status):
+                        from app.main import app
+                        from app.database import get_db, Base
+
+# Асинхронная фикстура для тестовой базы данных
+@pytest_asyncio.fixture(scope="function")
+async def test_db():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     
-    def override_get_db():
-        try:
-            db = TestingSessionLocal()
-            yield db
-        finally:
-            db.close()
+    AsyncTestingSessionLocal = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    
+    async def override_get_db():
+        async with AsyncTestingSessionLocal() as session:
+            try:
+                yield session
+            finally:
+                await session.close()
     
     app.dependency_overrides[get_db] = override_get_db
     
-    db = TestingSessionLocal()
-    yield db
+    async with AsyncTestingSessionLocal() as session:
+        yield session
     
-    db.close()
-    Base.metadata.drop_all(bind=engine)
     app.dependency_overrides.clear()
+    await engine.dispose()
 
-# Фикстура для тестового клиента
-@pytest.fixture(scope="function")
-def client(test_db):
-    with TestClient(app) as test_client:
-        yield test_client
+# Асинхронная фикстура для тестового клиента
+@pytest_asyncio.fixture(scope="function")
+async def client(test_db):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        yield client
 
 # Тестовые данные для позиции меню
 @pytest.fixture
@@ -121,11 +135,11 @@ def sample_review_data():
         "comment": "Отличный сервис"
     }
 
-# Фабрика для создания аутентифицированных пользователей
-@pytest.fixture
-def create_authenticated_client(client, test_db):
+# Асинхронная фабрика для создания аутентифицированных пользователей
+@pytest_asyncio.fixture
+async def create_authenticated_client(client, test_db):
     from app.models.user import UserRole
-    def _create_client(role=UserRole.CLIENT, **user_kwargs):
+    async def _create_client(role=UserRole.CLIENT, **user_kwargs):
         from app.models.user import User
         from app.services.auth_service import get_current_user
         
@@ -141,8 +155,8 @@ def create_authenticated_client(client, test_db):
         
         user = User(**user_data)
         test_db.add(user)
-        test_db.commit()
-        test_db.refresh(user)
+        await test_db.commit()
+        await test_db.refresh(user)
         
         async def mock_get_current_user():
             return user
@@ -155,21 +169,21 @@ def create_authenticated_client(client, test_db):
     app.dependency_overrides.clear()
 
 # Фикстура для создания аутентифицированного клиента
-@pytest.fixture
-def authenticated_client(create_authenticated_client):
+@pytest_asyncio.fixture
+async def authenticated_client(create_authenticated_client):
     from app.models.user import UserRole
-    return create_authenticated_client(role=UserRole.CLIENT)
+    return await create_authenticated_client(role=UserRole.CLIENT)
 
 # Фикстура для создания аутентифицированного админа
-@pytest.fixture
-def admin_client(create_authenticated_client):
+@pytest_asyncio.fixture
+async def admin_client(create_authenticated_client):
     from app.models.user import UserRole
-    return create_authenticated_client(role=UserRole.ADMIN)
+    return await create_authenticated_client(role=UserRole.ADMIN)
 
-# Фикстура для тестовой позиции меню
-@pytest.fixture
-def sample_menu_item(test_db):
-    from app.models.menu_items import MenuItem, MenuCategory
+# Асинхронная фикстура для тестовой позиции меню
+@pytest_asyncio.fixture
+async def sample_menu_item(test_db):
+    from app.models.menu_items import MenuItem, MenuCategory, MenuItemImage
     
     item = MenuItem(
         name="Тестовое блюдо",
@@ -179,13 +193,28 @@ def sample_menu_item(test_db):
         is_available=True
     )
     test_db.add(item)
-    test_db.commit()
-    test_db.refresh(item)
-    return item
+    await test_db.commit()
+    await test_db.refresh(item)
 
-# Фикстура для тестового заказа
-@pytest.fixture
-def sample_order(test_db):
+    image1 = MenuItemImage(item_id=item.item_id, image_url="http://test.com/test.jpg")
+    image2 = MenuItemImage(item_id=item.item_id, image_url="http://test.com/image.jpg")
+    test_db.add_all([image1, image2])
+    await test_db.commit()
+
+    result = await test_db.execute(
+        select(MenuItem)
+        .options(selectinload(MenuItem.images))
+        .where(MenuItem.item_id == item.item_id)
+    )
+    item_with_relations = result.scalar_one()
+
+    item_with_relations.image_urls = [img.image_url for img in item_with_relations.images]
+    
+    return item_with_relations
+
+# Асинхронная фикстура для тестового заказа
+@pytest_asyncio.fixture
+async def sample_order(test_db):
     from app.models.orders import Order, OrderStatus
     from datetime import datetime
     
@@ -194,16 +223,30 @@ def sample_order(test_db):
         table_number=5,
         total_price=100.0,
         status=OrderStatus.PENDING,
-        order_date=datetime.now()
+        order_date=datetime.now(),
+        comment=None
     )
     test_db.add(order)
-    test_db.commit()
-    test_db.refresh(order)
+    await test_db.commit()
+    await test_db.refresh(order)
+
+    result = await test_db.execute(
+        select(Order)
+        .options(
+            selectinload(Order.items),
+            selectinload(Order.assignments)
+        )
+        .where(Order.order_id == order.order_id)
+    )
+    order_with_relations = result.scalar_one()
+    
+    return order_with_relations
+
     return order
 
-# Фикстура для тестового бронирования
-@pytest.fixture
-def sample_booking(test_db):
+# Асинхронная фикстура для тестового бронирования
+@pytest_asyncio.fixture
+async def sample_booking(test_db):
     from app.models.table_booking import TableBooking, BookingStatus
     from datetime import datetime, timedelta
     
@@ -218,13 +261,13 @@ def sample_booking(test_db):
         duration_minutes=120
     )
     test_db.add(booking)
-    test_db.commit()
-    test_db.refresh(booking)
+    await test_db.commit()
+    await test_db.refresh(booking)
     return booking
 
-# Фикстура для тестового отзыва
-@pytest.fixture
-def sample_review(test_db, sample_order):
+# Асинхронная фикстура для тестового отзыва
+@pytest_asyncio.fixture
+async def sample_review(test_db, sample_order):
     from app.models.reviews import Review
     from datetime import datetime
     
@@ -236,13 +279,13 @@ def sample_review(test_db, sample_order):
         review_date=datetime.now()
     )
     test_db.add(review)
-    test_db.commit()
-    test_db.refresh(review)
+    await test_db.commit()
+    await test_db.refresh(review)
     return review
 
-# Фикстура для тестового ингредиента
-@pytest.fixture
-def sample_ingredient(test_db):
+# Асинхронная фикстура для тестового ингредиента
+@pytest_asyncio.fixture
+async def sample_ingredient(test_db):
     from app.models.ingredients import Ingredient
     from decimal import Decimal
     
@@ -253,13 +296,13 @@ def sample_ingredient(test_db):
         threshold=Decimal("100.0")
     )
     test_db.add(ingredient)
-    test_db.commit()
-    test_db.refresh(ingredient)
+    await test_db.commit()
+    await test_db.refresh(ingredient)
     return ingredient
 
-# Фикстура для тестового пользователя в БД
-@pytest.fixture
-def sample_user(test_db):
+# Асинхронная фикстура для тестового пользователя в БД
+@pytest_asyncio.fixture
+async def sample_user(test_db):
     from app.models.user import User, UserRole
     
     user = User(
@@ -270,8 +313,8 @@ def sample_user(test_db):
         phone_number="+79991234567"
     )
     test_db.add(user)
-    test_db.commit()
-    test_db.refresh(user)
+    await test_db.commit()
+    await test_db.refresh(user)
     return user
 
 # Фикстура для мока WebSocket менеджера

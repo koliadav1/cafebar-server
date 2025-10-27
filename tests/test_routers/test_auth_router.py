@@ -1,14 +1,16 @@
+import pytest
 from unittest.mock import patch
 
 class TestAuthRouter:
     # Тест успешного логина
-    def test_login_success(self, client, sample_user, mock_verify_password):
+    @pytest.mark.asyncio
+    async def test_login_success(self, client, sample_user, mock_verify_password):
         login_data = {
             "email": "test@example.com",
             "password": "password123"
         }
         
-        response = client.post("/auth/login", json=login_data)
+        response = await client.post("/auth/login", json=login_data)
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -16,7 +18,8 @@ class TestAuthRouter:
         assert len(data["access_token"]) > 0
 
     # Тест неуспешного логина
-    def test_login_failure(self, client):
+    @pytest.mark.asyncio
+    async def test_login_failure(self, client):
         from fastapi import HTTPException
         
         with patch('app.services.auth_service.login_user', 
@@ -27,7 +30,7 @@ class TestAuthRouter:
                 "password": "wrongpassword"
             }
             
-            response = client.post("/auth/login", json=login_data)
+            response = await client.post("/auth/login", json=login_data)
             
             assert response.status_code == 401
             assert "Неверный email или пароль" in response.json()["detail"]

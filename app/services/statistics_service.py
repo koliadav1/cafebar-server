@@ -1,5 +1,5 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 from datetime import date
 
 from app.models.orders import Order, OrderStatus
@@ -7,33 +7,35 @@ from app.models.order_assignments import OrderAssignment
 from app.models.user import UserRole
 from app.schemas.statistics import StaffStatsOut, StaffStatsWithRankOut
 
-#Получить статистику по работе персонала
-def get_staff_statistics(
-    db: Session,
+# Получить статистику по работе персонала
+async def get_staff_statistics(
+    db: AsyncSession,
     user_id: int,
     role: UserRole,
     is_admin: bool = False,
     start_date: date | None = None,
     end_date: date | None = None
 ) -> list[StaffStatsOut] | dict:
-    query = db.query(
+    stmt = select(
         OrderAssignment.user_id,
         OrderAssignment.role,
         func.count(OrderAssignment.order_id).label("orders_count")
     ).join(Order, OrderAssignment.order_id == Order.order_id)
 
     if role == UserRole.WAITER:
-        query = query.filter(Order.status == OrderStatus.COMPLETED)
+        stmt = stmt.where(Order.status == OrderStatus.COMPLETED)
     elif role in [UserRole.COOK, UserRole.BARKEEPER]:
-        query = query.filter(Order.status.in_([OrderStatus.COMPLETED, OrderStatus.READY]))
+        stmt = stmt.where(Order.status.in_([OrderStatus.COMPLETED, OrderStatus.READY]))
 
     if start_date:
-        query = query.filter(Order.order_date >= start_date)
+        stmt = stmt.where(Order.order_date >= start_date)
     if end_date:
-        query = query.filter(Order.order_date <= end_date)
+        stmt = stmt.where(Order.order_date <= end_date)
 
-    query = query.group_by(OrderAssignment.user_id, OrderAssignment.role)
-    stats = query.all()
+    stmt = stmt.group_by(OrderAssignment.user_id, OrderAssignment.role)
+
+    result = await db.execute(stmt)
+    stats = result.all()
 
     if is_admin:
         return [StaffStatsWithRankOut(

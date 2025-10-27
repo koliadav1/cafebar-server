@@ -8,31 +8,35 @@ from app.schemas.auth import LoginRequest
 
 class TestAuthService:
     # Тест успешной проверки пароля
+    @pytest.mark.asyncio
     def test_verify_password_success(self):
         with patch('app.services.auth_service.pwd_context.verify', return_value=True):
             result = verify_password("password123", "hashed_password")
             assert result is True
 
     # Тест успешного логина
-    def test_login_user_success(self, test_db, sample_user, mock_verify_password):
+    @pytest.mark.asyncio
+    async def test_login_user_success(self, test_db, sample_user, mock_verify_password):
         login_data = LoginRequest(email="test@example.com", password="password123")
-        result = login_user(login_data, test_db)
+        result = await login_user(login_data, test_db)
         assert result.email == "test@example.com"
         assert result.username == "testuser"
 
     # Тест логина с неправильным паролем
-    def test_login_user_wrong_password(self, test_db):
+    @pytest.mark.asyncio
+    async def test_login_user_wrong_password(self, test_db):
         login_data = LoginRequest(email="test@example.com", password="wrongpassword")
         with patch('app.services.auth_service.verify_password', return_value=False):
             with pytest.raises(HTTPException) as exc_info:
-                login_user(login_data, test_db)
+                await login_user(login_data, test_db)
             assert exc_info.value.status_code == 401
 
     # Тест логина несуществующего пользователя
-    def test_login_user_not_found(self, test_db):
+    @pytest.mark.asyncio
+    async def test_login_user_not_found(self, test_db):
         login_data = LoginRequest(email="nonexistent@example.com", password="password")
         with pytest.raises(HTTPException) as exc_info:
-            login_user(login_data, test_db)
+            await login_user(login_data, test_db)
         
         assert exc_info.value.status_code == 401
         assert "Неверный email или пароль" in str(exc_info.value.detail)
@@ -45,23 +49,26 @@ class TestAuthService:
         assert len(token) > 0
 
     # Тест получения текущего пользователя по токену
-    def test_get_current_user_success(self, test_db, sample_user):
+    @pytest.mark.asyncio
+    async def test_get_current_user_success(self, test_db, sample_user):
         token = create_access_token({"user_id": sample_user.user_id})
-        result = get_current_user(token=token, db=test_db)
+        result = await get_current_user(token=token, db=test_db)
         assert result.user_id == sample_user.user_id
         assert result.username == "testuser"
 
     # Тест получения пользователя с невалидным токеном
-    def test_get_current_user_invalid_token(self, test_db):
+    @pytest.mark.asyncio
+    async def test_get_current_user_invalid_token(self, test_db):
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(token="invalid_token", db=test_db)
+            await get_current_user(token="invalid_token", db=test_db)
         
         assert exc_info.value.status_code == 401
 
     # Тест получения несуществующего пользователя по токену
-    def test_get_current_user_not_found(self, test_db):
+    @pytest.mark.asyncio
+    async def test_get_current_user_not_found(self, test_db):
         token = create_access_token({"user_id": 999})
         
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(token=token, db=test_db)
+            await get_current_user(token=token, db=test_db)
         assert exc_info.value.status_code == 401

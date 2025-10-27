@@ -21,7 +21,7 @@ class Config:
     YANDEX_BUCKET_NAME=os.getenv("YANDEX_BUCKET_NAME")
     YANDEX_ENDPOINT=os.getenv("YANDEX_ENDPOINT")
 
-    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     
     @classmethod
     def validate(cls):

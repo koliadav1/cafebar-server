@@ -1,6 +1,6 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.resume import Resume
 from app.database import get_db
@@ -14,45 +14,45 @@ router = APIRouter(
     tags=["Резюме"]
 )
 
-#Создание резюме
+# Создание резюме
 @router.post("/", response_model=schemas.ResumeOut, status_code=201)
-def submit_resume(resume: schemas.ResumeCreate, db: Session = Depends(get_db)) -> Resume:
-    return service.submit_resume(resume, db)
+async def submit_resume(resume: schemas.ResumeCreate, db: AsyncSession = Depends(get_db)) -> Resume:
+    return await service.submit_resume(resume, db)
 
-#Ответ на резюме
+# Ответ на резюме
 @router.put("/{resume_id}/response", response_model=schemas.ResumeOut)
-def respond_to_resume(resume_id: int, 
+async def respond_to_resume(resume_id: int,
                       response: schemas.ResumeUpdateResponse, 
-                      db: Session = Depends(get_db), 
+                      db: AsyncSession = Depends(get_db),
                       current_user: User = Depends(get_current_user)) -> Resume:
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Только админы могут отвечать на резюме")
-    return service.respond_to_resume(resume_id, response.response, db)
+    return await service.respond_to_resume(resume_id, response.response, db)
 
-#Изменение статуса резюме
+# Изменение статуса резюме
 @router.put("/{resume_id}/status", response_model=schemas.ResumeOut)
-def update_resume_status(resume_id: int, 
+async def update_resume_status(resume_id: int,
                          status: schemas.ResumeUpdateStatus, 
-                         db: Session = Depends(get_db), 
+                         db: AsyncSession = Depends(get_db),
                          current_user: User = Depends(get_current_user)) -> Resume:
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Только админы могут менять статус резюме")
-    return service.change_resume_status(resume_id, status.status, db)
+    return await service.change_resume_status(resume_id, status.status, db)
 
-#Удаление резюме
+# Удаление резюме
 @router.delete("/{resume_id}")
-def delete_resume(resume_id: int, 
-                  db: Session = Depends(get_db), 
+async def delete_resume(resume_id: int,
+                  db: AsyncSession = Depends(get_db),
                   current_user: User = Depends(get_current_user)) -> dict[str, str]:
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Только админы могут удалять резюме")
-    return service.delete_resume(resume_id, db)
+    return await service.delete_resume(resume_id, db)
 
-#Получение всех резюме
+# Получение всех резюме
 @router.get("/", response_model=list[schemas.ResumeOut])
-async def get_resumes(db: Session = Depends(get_db), 
+async def get_resumes(db: AsyncSession = Depends(get_db),
                       current_user: User = Depends(get_current_user)) -> List[Resume]:
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Только админы могут просматривать резюме")
 
-    return service.get_all_resumes(db)
+    return await service.get_all_resumes(db)
