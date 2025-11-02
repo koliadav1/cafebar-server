@@ -1,5 +1,4 @@
 from sqlalchemy import Column, Integer, String, Numeric
-from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -11,5 +10,3 @@ class Ingredient(Base):
     unit = Column(String, nullable=False)
     quantity = Column(Numeric, nullable=False)
     threshold = Column(Numeric, nullable=False)
-
-    supply_orders = relationship('SupplyOrder', back_populates='ingredient')

@@ -1,5 +1,6 @@
+from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from typing import List, Optional
 
 from app.models.staff_shifts import StaffShift
@@ -8,6 +9,47 @@ from app.schemas.shift import StaffShiftCreate, StaffShiftUpdate
 # Получить все смены
 async def get_all_shifts(db: AsyncSession) -> List[StaffShift]:
     result = await db.execute(select(StaffShift))
+    return result.scalars().all()
+
+# Получить все активные смены на сейчас
+async def get_active_shifts(db: AsyncSession) -> List[StaffShift]:
+    result = await db.execute(
+        select(StaffShift).where(StaffShift.is_active)
+    )
+    return result.scalars().all()
+
+# Получить активную смену пользователя если есть
+async def get_user_active_shift(db: AsyncSession, user_id: int) -> Optional[StaffShift]:
+    result = await db.execute(
+        select(StaffShift).where(
+            and_(
+                StaffShift.user_id == user_id,
+                StaffShift.is_active
+            )
+        )
+    )
+    return result.scalar_one_or_none()
+
+# Получить все смены на сегодня
+async def get_today_shifts(db: AsyncSession) -> List[StaffShift]:
+    today = date.today()
+    result = await db.execute(
+        select(StaffShift).where(StaffShift.shift_date == today)
+    )
+    return result.scalars().all()
+
+# Получить будущие смены
+async def get_future_shifts(db: AsyncSession) -> List[StaffShift]:
+    result = await db.execute(
+        select(StaffShift).where(StaffShift.is_future)
+    )
+    return result.scalars().all()
+
+# Получить завершенные смены
+async def get_past_shifts(db: AsyncSession) -> List[StaffShift]:
+    result = await db.execute(
+        select(StaffShift).where(StaffShift.is_past)
+    )
     return result.scalars().all()
 
 # Получить смены конкретного пользователя

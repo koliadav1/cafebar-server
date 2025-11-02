@@ -48,9 +48,9 @@ class TestUserRouter:
 
     # Тест удаления пользователя админом
     @pytest.mark.asyncio
-    async def test_delete_user_as_admin(self, admin_client, test_db):
+    async def test_delete_user_as_admin(self, admin_client, sample_user, test_db):
         with patch('app.services.user_service.delete_user', return_value={"detail": "Пользователь успешно удалён"}):
-            response = await admin_client.delete("/users/1") 
+            response = await admin_client.delete(f"/users/{sample_user.user_id}") 
             assert response.status_code == 204
 
     # Тест удаления пользователя без прав админа

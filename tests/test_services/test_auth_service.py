@@ -8,7 +8,6 @@ from app.schemas.auth import LoginRequest
 
 class TestAuthService:
     # Тест успешной проверки пароля
-    @pytest.mark.asyncio
     def test_verify_password_success(self):
         with patch('app.services.auth_service.pwd_context.verify', return_value=True):
             result = verify_password("password123", "hashed_password")

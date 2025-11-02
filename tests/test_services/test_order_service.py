@@ -91,7 +91,7 @@ class TestOrderService:
 
     # Тест назначения персонала на заказ
     @pytest.mark.asyncio
-    async def test_assign_staff_to_order_success(self, test_db, sample_order):
+    async def test_assign_staff_to_order_success(self, test_db, sample_order, sample_active_shift):
         result = await assign_staff_to_order(sample_order.order_id, 2, StaffRole.WAITER, test_db)
         assert result.order_id == sample_order.order_id
         
@@ -103,7 +103,7 @@ class TestOrderService:
 
     # Тест повторного назначения персонала на заказ
     @pytest.mark.asyncio
-    async def test_assign_staff_to_order_duplicate(self, test_db):
+    async def test_assign_staff_to_order_duplicate(self, test_db, sample_active_shift):
         order = Order(user_id=1, table_number=5, total_price=100.0)
         test_db.add(order)
         await test_db.commit()

@@ -19,7 +19,7 @@ class Order(Base):
 
     order_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.user_id'), nullable=True)
-    order_date = Column(TIMESTAMP, default=datetime.utcnow, nullable=False)
+    order_date = Column(TIMESTAMP, default=datetime.now(), nullable=False)
     total_price = Column(Numeric(10, 2), nullable=False)
     status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     table_number = Column(Integer, nullable=False)

@@ -9,7 +9,7 @@ from app.realtime.websocket_manager import manager
 from app.realtime.events import handle_event
 from jose import JWTError, jwt
 
-from app.routers import users, auth, menu, orders, reviews, supplies, shifts, ingredients, booking, resume, recommendations, statistics
+from app.routers import users, auth, menu, orders, reviews, shifts, ingredients, booking, recommendations, statistics
 
 from app.config import Config
 
@@ -67,10 +67,8 @@ app.include_router(menu.router)
 app.include_router(ingredients.router)
 app.include_router(orders.router)
 app.include_router(reviews.router)
-app.include_router(supplies.router)
 app.include_router(shifts.router)
 app.include_router(booking.router)
-app.include_router(resume.router)
 app.include_router(recommendations.router)
 app.include_router(statistics.router)
 

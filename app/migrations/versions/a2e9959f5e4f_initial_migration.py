@@ -40,15 +40,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('item_id')
     )
     op.create_index(op.f('ix_menu_items_item_id'), 'menu_items', ['item_id'], unique=False)
-    op.create_table('resumes',
-    sa.Column('resume_id', sa.Integer(), nullable=False),
-    sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('phone_number', sa.String(), nullable=False),
-    sa.Column('response', sa.Text(), nullable=True),
-    sa.Column('status', sa.Enum('PENDING', 'ACCEPTED', 'REJECTED', name='resumestatus'), nullable=False),
-    sa.PrimaryKeyConstraint('resume_id')
-    )
-    op.create_index(op.f('ix_resumes_resume_id'), 'resumes', ['resume_id'], unique=False)
     op.create_table('users',
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('username', sa.String(), nullable=False),
@@ -99,20 +90,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('shift_id')
     )
     op.create_index(op.f('ix_staff_shifts_shift_id'), 'staff_shifts', ['shift_id'], unique=False)
-    op.create_table('supply_orders',
-    sa.Column('supply_order_id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('ingredient_id', sa.Integer(), nullable=False),
-    sa.Column('ordered_quantity', sa.Numeric(precision=10, scale=3), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'DELIVERED', 'CANCELLED', name='supplystatus'), nullable=False),
-    sa.Column('order_date', sa.TIMESTAMP(), nullable=False),
-    sa.Column('delivery_date', sa.TIMESTAMP(), nullable=True),
-    sa.Column('price', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.CheckConstraint('delivery_date IS NULL OR delivery_date >= order_date', name='check_delivery_date'),
-    sa.CheckConstraint('ordered_quantity > 0', name='check_positive_quantity'),
-    sa.ForeignKeyConstraint(['ingredient_id'], ['ingredients.ingredient_id'], ),
-    sa.PrimaryKeyConstraint('supply_order_id')
-    )
-    op.create_index(op.f('ix_supply_orders_supply_order_id'), 'supply_orders', ['supply_order_id'], unique=False)
     op.create_table('table_bookings',
     sa.Column('booking_id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('table_number', sa.Integer(), nullable=False),
@@ -178,8 +155,6 @@ def downgrade() -> None:
     op.drop_table('order_assignments')
     op.drop_index(op.f('ix_table_bookings_booking_id'), table_name='table_bookings')
     op.drop_table('table_bookings')
-    op.drop_index(op.f('ix_supply_orders_supply_order_id'), table_name='supply_orders')
-    op.drop_table('supply_orders')
     op.drop_index(op.f('ix_staff_shifts_shift_id'), table_name='staff_shifts')
     op.drop_table('staff_shifts')
     op.drop_index(op.f('ix_orders_order_id'), table_name='orders')
@@ -189,8 +164,6 @@ def downgrade() -> None:
     op.drop_table('menu_item_images')
     op.drop_index(op.f('ix_users_user_id'), table_name='users')
     op.drop_table('users')
-    op.drop_index(op.f('ix_resumes_resume_id'), table_name='resumes')
-    op.drop_table('resumes')
     op.drop_index(op.f('ix_menu_items_item_id'), table_name='menu_items')
     op.drop_table('menu_items')
     op.drop_index(op.f('ix_ingredients_ingredient_id'), table_name='ingredients')

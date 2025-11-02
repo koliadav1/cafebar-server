@@ -242,7 +242,26 @@ async def sample_order(test_db):
     
     return order_with_relations
 
-    return order
+# Асинхронная фикстура для тестовой активной смены
+@pytest_asyncio.fixture
+async def sample_active_shift(test_db):
+    from app.models.staff_shifts import StaffShift
+    from datetime import datetime, date, timedelta
+    
+    now = datetime.now()
+    shift_start = (now - timedelta(hours=1)).time()
+    shift_end = (now + timedelta(hours=1)).time()
+    
+    shift = StaffShift(
+        user_id=2,
+        shift_date=date.today(),
+        shift_start=shift_start,
+        shift_end=shift_end
+    )
+    test_db.add(shift)
+    await test_db.commit()
+    await test_db.refresh(shift)
+    return shift
 
 # Асинхронная фикстура для тестового бронирования
 @pytest_asyncio.fixture

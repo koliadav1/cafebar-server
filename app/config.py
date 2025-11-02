@@ -21,6 +21,8 @@ class Config:
     YANDEX_BUCKET_NAME=os.getenv("YANDEX_BUCKET_NAME")
     YANDEX_ENDPOINT=os.getenv("YANDEX_ENDPOINT")
 
+    REDIS_URL = os.getenv("REDIS_URL")
+
     DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     
     @classmethod
@@ -43,5 +45,7 @@ class Config:
             raise ValueError('YANDEX_BUCKET_NAME не найден в .env')
         if not cls.YANDEX_ENDPOINT:
             raise ValueError('YANDEX_ENDPOINT не найден в .env')
+        if not cls.REDIS_URL:
+            raise ValueError('REDIS_URL не найден в .env')
 
 Config.validate()

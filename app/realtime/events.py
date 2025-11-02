@@ -46,6 +46,7 @@ async def handle_event(sender_id: str, data: dict):
                 "type": f"reservation_{action}",
                 "payload": payload
             }, roles={"Client", "Admin"})
+            
     # Обработка отдельных позиций заказа
     elif event_type == "order_item":
         if action == "update":
