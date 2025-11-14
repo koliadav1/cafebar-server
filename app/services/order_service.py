@@ -1,7 +1,6 @@
-from datetime import date, datetime
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, select, delete
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
@@ -9,8 +8,6 @@ from app.models.orders import Order
 from app.models.order_items import OrderItem
 from app.models.menu_items import MenuItem
 from app.models.order_assignments import OrderAssignment, StaffRole
-from app.models.staff_shifts import StaffShift
-from app.models.user import User
 from app.schemas import order as schemas
 from app.services.shift_service import get_user_active_shift
 
